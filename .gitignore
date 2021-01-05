@@ -3,6 +3,7 @@ payload.min.js
 payload.ugly.js
 key.pem
 cert.pem
+sqlite.db 
 
 # Created by https://www.toptal.com/developers/gitignore/api/macos,linux,windows,vscode,node,python,vim
 # Edit at https://www.toptal.com/developers/gitignore?templates=macos,linux,windows,vscode,node,python,vim

