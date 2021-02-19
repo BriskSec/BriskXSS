@@ -131,6 +131,20 @@ def create_db(conn):
     except Error as e:
         print(e)
 
+    createKeysTable="""CREATE TABLE IF NOT EXISTS keys (
+            id integer PRIMARY KEY,
+            extraction_id INTEGER NOT NULL,
+            url text NOT NULL,
+            time text NOT NULL,
+            keys text,
+            FOREIGN KEY(extraction_id) REFERENCES extraction(id)
+            );"""
+    try:
+        c = conn.cursor()
+        c.execute(createKeysTable)
+    except Error as e:
+        print(e)
+
 def get_or_insert_extraction(conn, domain, time, ip):
     sql = """SELECT id 
               FROM extraction 
@@ -194,6 +208,13 @@ def insert_input(conn, content):
 def insert_browser(conn, content):
     sql = ''' INSERT INTO browser(extraction_id,name,full_version,major_version,navigator_appname,navigator_appversion,navigator_useragent,plugin_list,os)
               VALUES(?,?,?,?,?,?,?,?,?) '''
+    cur = conn.cursor()
+    cur.execute(sql, content)
+    return cur.lastrowid
+
+def insert_keys(conn, content):
+    sql = ''' INSERT INTO keys(extraction_id,url,time,keys)
+              VALUES(?,?,?,?) '''
     cur = conn.cursor()
     cur.execute(sql, content)
     return cur.lastrowid

